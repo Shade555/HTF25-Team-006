@@ -10,7 +10,6 @@ from dotenv import load_dotenv
 
 # Load .env file from src/backend/.env for local development
 load_dotenv()
-from tts.polly_adapter import PollyAdapter
 from tts.pyttsx_adapter import PyTTS3Adapter
 
 ALLOWED_EXTENSIONS = {"pdf", "txt"}
@@ -25,16 +24,16 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Default to local pyttsx3 for development to avoid accidental cloud/billing usage.
-# To force Amazon Polly, set environment variable TTS_PROVIDER=polly
+# TTS_PROVIDER env var is accepted but this project build only supports the
+# local pyttsx3 adapter; any other value will fall back to pyttsx3.
 TTS_PROVIDER = os.getenv('TTS_PROVIDER', 'pyttsx3').lower()
-
-# Initialize TTS adapter based on environment (polly or pyttsx3)
 if TTS_PROVIDER == 'pyttsx3':
     logger.info('Using pyttsx3 local TTS provider')
-    tts_adapter = PyTTS3Adapter()
 else:
-    logger.info('Using Amazon Polly TTS provider')
-    tts_adapter = PollyAdapter(region_name=os.getenv("AWS_DEFAULT_REGION"))
+    logger.info("TTS_PROVIDER set to '%s' but only local pyttsx3 is supported; falling back to pyttsx3", TTS_PROVIDER)
+
+# Always use the local pyttsx3 adapter
+tts_adapter = PyTTS3Adapter()
 
 
 @app.after_request
@@ -67,13 +66,13 @@ def tts_voices():
     # Optional query param language, e.g. ?lang=en-US
     lang = request.args.get("lang")
     try:
-        # Adapter may implement list_voices; polly does, pyttsx3 adapter also provides a list_voices()
+        # Adapter may implement list_voices; call with language_code where supported.
         voices = []
         if hasattr(tts_adapter, 'list_voices'):
-            # polly accepts language_code arg, pyttsx3 ignores it
-            if TTS_PROVIDER == 'polly':
+            try:
                 voices = tts_adapter.list_voices(language_code=lang)
-            else:
+            except TypeError:
+                # adapter does not accept language_code arg
                 voices = tts_adapter.list_voices()
 
         # Return a small piece of metadata to the frontend
@@ -88,7 +87,7 @@ def tts_voices():
         ]
         return jsonify({"voices": out})
     except Exception:
-        logger.exception("Failed to list voices from Polly")
+        logger.exception("Failed to list voices")
         return jsonify({"voices": []}), 500
 
 
@@ -106,14 +105,14 @@ def tts_preview():
         return jsonify({"error": "text required and must be <= 2000 chars for preview"}), 400
 
     try:
-        audio_bytes = tts_adapter.synthesize(text, voice=voice, engine=engine, output_format='mp3', text_type='text')
+        # local adapter produces WAV
+        audio_bytes = tts_adapter.synthesize(text, voice=voice, engine=engine, output_format='wav', text_type='text')
         if not audio_bytes:
             return jsonify({"error": "no audio returned"}), 500
-        # Set mimetype depending on provider (polly -> mp3, pyttsx3 -> wav)
-        mimetype = 'audio/mpeg' if TTS_PROVIDER == 'polly' else 'audio/wav'
+        mimetype = 'audio/wav'
         return Response(audio_bytes, mimetype=mimetype)
     except Exception:
-        logger.exception("Polly synth failed for preview")
+        logger.exception("TTS synth failed for preview")
         return jsonify({"error": "synthesis failed"}), 500
 
 
@@ -176,10 +175,11 @@ def generate_podcast():
             audio_ct = None
             voice_choice = request.form.get('voice') or request.args.get('voice') or 'Joanna'
             try:
-                audio_bytes = tts_adapter.synthesize(summary, voice=voice_choice, engine='neural', output_format='mp3')
+                # produce WAV via local adapter
+                audio_bytes = tts_adapter.synthesize(summary, voice=voice_choice, engine='neural', output_format='wav')
                 if audio_bytes:
                     audio_b64 = base64.b64encode(audio_bytes).decode('ascii')
-                    audio_ct = 'audio/mpeg' if TTS_PROVIDER == 'polly' else 'audio/wav'
+                    audio_ct = 'audio/wav'
             except Exception:
                 logger.exception('TTS synthesis failed for generated summary')
                 audio_b64 = None

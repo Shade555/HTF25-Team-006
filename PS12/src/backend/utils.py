@@ -1,6 +1,10 @@
 import fitz  # PyMuPDF
 import os
 import re
+import logging
+import numpy as np
+
+_logger = logging.getLogger(__name__)
 
 
 def extract_text_from_file(path: str) -> str:
@@ -86,17 +90,141 @@ def clean_text(text: str) -> str:
     return cleaned.strip()
 
 
-def summarize_text(text: str, max_chars: int = 2000) -> str:
+def summarize_text(text: str, max_chars: int = 2000, model_min_len: int = 25, model_max_len: int | None = None, target_ratio: float = 0.6) -> str:
     """
-    Lightweight summarizer stub: returns the first N characters or first few sentences.
-    Replace this with a call to an LLM summarization endpoint later (OpenAI/Gemini/etc.).
+    Hierarchical summarization with a preference for a local transformers
+    summarizer (distilbart). Falls back to a spaCy extractive summarizer and
+    finally a simple heuristic.
+
+    The function attempts to summarize long texts by chunking them,
+    summarizing each chunk, then recursively compressing the combined
+    chunk-summaries until the result fits within `max_chars`.
     """
     if not text:
         return ""
 
-    # Try to return first 3 sentences
-    sentences = re.split(r"(?<=[.!?])\s+", text)
-    summary = " ".join(sentences[:3])
-    if len(summary) > max_chars:
-        return summary[:max_chars].rsplit(" ", 1)[0] + "..."
-    return summary
+    # Attempt transformers-based abstractive summarization first
+    try:
+        from transformers import pipeline
+
+        _summ = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
+
+        max_chunk_size = 1000
+        chunks = [text[i:i + max_chunk_size] for i in range(0, len(text), max_chunk_size)]
+
+        summarized_chunks = []
+        for chunk in chunks:
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            # For very short chunks, skip heavy summarization
+            if len(chunk) < 40:
+                summarized_chunks.append(chunk)
+                continue
+
+            computed = int(max(5, len(chunk) * float(target_ratio)))
+            if computed >= len(chunk):
+                computed = max(len(chunk) - 1, 1)
+
+            cap = 150
+            chosen_max = model_max_len if model_max_len is not None else min(computed, cap)
+            chosen_min = max(5, int(chosen_max * 0.6))
+            if chosen_min >= chosen_max:
+                chosen_min = max(1, chosen_max - 1)
+
+            out = _summ(chunk, max_length=chosen_max, min_length=chosen_min, do_sample=False)
+            if out and isinstance(out, list):
+                summarized_chunks.append(out[0].get("summary_text", "").strip())
+
+        combined = " ".join([s for s in summarized_chunks if s]).strip()
+        if not combined:
+            raise RuntimeError("Transformers summarizer returned empty summary")
+
+        iterations = 0
+        max_iterations = 6
+        while len(combined) > max_chars and iterations < max_iterations:
+            iterations += 1
+            c_chunks = [combined[i:i + 1000] for i in range(0, len(combined), 1000)]
+            next_chunks = []
+            for c in c_chunks:
+                c = c.strip()
+                if not c:
+                    continue
+                c_len = len(c)
+                auto_max = max(25, min(int(c_len * 0.4), 120))
+                chosen_max = model_max_len if model_max_len is not None else auto_max
+                chosen_min = min(model_min_len, max(10, chosen_max - 1))
+                out = _summ(c, max_length=chosen_max, min_length=chosen_min, do_sample=False)
+                if out and isinstance(out, list):
+                    next_chunks.append(out[0].get("summary_text", "").strip())
+            combined = " ".join([s for s in next_chunks if s]).strip()
+            if not combined:
+                break
+
+        if len(combined) > max_chars:
+            return combined[:max_chars].rsplit(" ", 1)[0] + "..."
+
+        return combined
+
+    except Exception:
+        _logger.exception("Transformers summarizer not available or failed; falling back to spaCy/heuristic summarizer")
+
+    # spaCy extractive summarizer fallback
+    try:
+        import spacy
+
+        nlp = spacy.load("en_core_web_sm")
+        doc = nlp(text)
+        sentences = list(doc.sents)
+        if not sentences:
+            return ""
+
+        freqs = {}
+        for token in doc:
+            if token.is_stop or token.is_punct or token.is_space or token.like_num:
+                continue
+            key = token.lemma_.lower()
+            if not key:
+                continue
+            freqs[key] = freqs.get(key, 0) + 1
+
+        if not freqs:
+            raise RuntimeError("No valid tokens for frequency scoring")
+
+        maxf = max(freqs.values())
+        for k in list(freqs.keys()):
+            freqs[k] = freqs[k] / float(maxf)
+
+        sent_scores = []
+        for i, sent in enumerate(sentences):
+            sscore = 0.0
+            count = 0
+            for token in sent:
+                if token.is_stop or token.is_punct or token.is_space or token.like_num:
+                    continue
+                key = token.lemma_.lower()
+                if not key:
+                    continue
+                sscore += freqs.get(key, 0.0)
+                count += 1
+            if count > 0:
+                sscore = sscore / count
+            sent_scores.append((i, sscore))
+
+        sent_scores.sort(key=lambda x: x[1], reverse=True)
+        top_n = min(5, len(sent_scores))
+        selected_idx = sorted([idx for idx, _ in sent_scores[:top_n]])
+
+        summary_sentences = [sentences[i].text.strip() for i in selected_idx]
+        summary = " ".join(summary_sentences)
+        if len(summary) > max_chars:
+            return summary[:max_chars].rsplit(" ", 1)[0] + "..."
+        return summary
+
+    except Exception:
+        _logger.exception("spaCy summarizer fallback failed; using simple heuristic")
+        sentences = re.split(r"(?<=[.!?])\s+", text)
+        summary = " ".join(sentences[:3])
+        if len(summary) > max_chars:
+            return summary[:max_chars].rsplit(" ", 1)[0] + "..."
+        return summary
