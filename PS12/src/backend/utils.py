@@ -29,8 +29,11 @@ def extract_text_from_pdf(path: str) -> str:
             if text:
                 text_parts.append(text)
         doc.close()
-    except Exception:
-        return ""
+    except Exception as e:
+        # Log the exception then re-raise so the caller can return a 500 and we keep useful traces
+        import logging
+        logging.exception("PDF extraction failed for %s", path)
+        raise
 
     return "\n".join(text_parts)
 

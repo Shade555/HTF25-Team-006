@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import './dashboard.css'
 
 export default function Dashboard() {
@@ -6,6 +6,8 @@ export default function Dashboard() {
   const [uploading, setUploading] = useState(false)
   const [podcasts, setPodcasts] = useState([])
   const [summary, setSummary] = useState(null)
+  const [voices, setVoices] = useState([])
+  const [selectedVoice, setSelectedVoice] = useState('Joanna')
 
   function handleFileChange(e) {
     const f = e.target.files && e.target.files[0]
@@ -37,6 +39,8 @@ export default function Dashboard() {
       const form = new FormData()
       form.append('file', selectedFile)
 
+      // append voice selection to form
+      form.append('voice', selectedVoice)
       const resp = await fetch('http://127.0.0.1:5000/api/generate-podcast', {
         method: 'POST',
         body: form,
@@ -52,6 +56,17 @@ export default function Dashboard() {
 
       if (data.audio_url) {
         setPodcasts((p) => [{ id: Date.now(), title: selectedFile.name, src: data.audio_url }, ...p])
+      } else if (data.audio_base64) {
+        // create a blob URL from base64
+        const bstr = atob(data.audio_base64)
+        let n = bstr.length
+        const u8arr = new Uint8Array(n)
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n)
+        }
+        const blob = new Blob([u8arr], { type: data.audio_content_type || 'audio/mpeg' })
+        const url = URL.createObjectURL(blob)
+        setPodcasts((p) => [{ id: Date.now(), title: selectedFile.name, src: url }, ...p])
       } else {
         // No audio yet — store summary-only item so user can see result
         setPodcasts((p) => [
@@ -70,11 +85,81 @@ export default function Dashboard() {
     }
   }
 
-  // Demo helper to add a sample audio item
-  function addDemoPodcast() {
+  useEffect(() => {
+    async function loadVoices() {
+      try {
+        const res = await fetch('http://127.0.0.1:5000/api/tts/voices')
+        const data = await res.json()
+        setVoices(data.voices || [])
+        if (data.voices && data.voices.length > 0) setSelectedVoice(data.voices[0].Id || 'Joanna')
+      } catch (err) {
+        console.error('Failed to load voices', err)
+      }
+    }
+    loadVoices()
+  }, [])
+
+  async function handlePreview() {
+    if (!selectedVoice) {
+      alert('Select a voice first')
+      return
+    }
+    const text = prompt('Enter short preview text (<= 2000 chars)', 'Hello, this is a quick preview.')
+    if (!text) return
+    try {
+      const resp = await fetch('http://127.0.0.1:5000/api/tts/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, voiceId: selectedVoice }),
+      })
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => null)
+        throw new Error(err?.error || 'Preview failed')
+      }
+      const blob = await resp.blob()
+      const url = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      audio.play()
+    } catch (err) {
+      alert('Preview error: ' + err.message)
+    }
+  }
+
+  // Demo helper to add a sample audio item. If a summary exists, request a local
+  // pyttsx3 preview from the backend and use that audio. Otherwise fall back to
+  // a static demo audio file.
+  async function addDemoPodcast() {
+    const id = Date.now()
+    const title = `Demo podcast ${podcasts.length + 1}`
+
+    if (summary && summary.trim().length > 0) {
+      try {
+        // preview endpoint limits text length; trim if necessary
+        const text = summary.length > 2000 ? summary.slice(0, 2000) : summary
+        const resp = await fetch('http://127.0.0.1:5000/api/tts/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, voiceId: selectedVoice }),
+        })
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => null)
+          throw new Error(err?.error || 'Preview failed')
+        }
+        const blob = await resp.blob()
+        const url = URL.createObjectURL(blob)
+        const demo = { id, title, src: url }
+        setPodcasts((p) => [demo, ...p])
+        return
+      } catch (err) {
+        console.error('Demo preview failed, falling back to static demo:', err)
+        // fall through to static demo below
+      }
+    }
+
+    // fallback static demo audio
     const demo = {
-      id: Date.now(),
-      title: `Demo podcast ${podcasts.length + 1}`,
+      id,
+      title,
       src: 'https://interactive-examples.mdn.mozilla.net/media/examples/t-rex-roar.mp3',
     }
     setPodcasts((p) => [demo, ...p])
@@ -95,6 +180,19 @@ export default function Dashboard() {
             <h3>Selected file</h3>
             {!selectedFile && <p>No file selected</p>}
             {selectedFile && <p>{selectedFile.name}</p>}
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <label>
+              Voice: {' '}
+              <select value={selectedVoice} onChange={(e) => setSelectedVoice(e.target.value)}>
+                {voices.map((v) => (
+                  <option key={v.Id} value={v.Id}>{`${v.Name} (${v.LanguageCode})`}</option>
+                ))}
+              </select>
+            </label>
+            <button type="button" style={{ marginLeft: 8 }} onClick={handlePreview}>
+              Preview Voice
+            </button>
           </div>
           <div className="actions">
             <button type="submit" disabled={uploading}>

@@ -1,3 +1,5 @@
 Flask>=2.2.5
 PyMuPDF>=1.22.0
 python-dotenv>=1.0.0
+boto3>=1.26.0
+pyttsx3>=2.90
