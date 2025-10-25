@@ -9,6 +9,15 @@ ALLOWED_EXTENSIONS = {"pdf", "txt"}
 app = Flask(__name__)
 
 
+@app.after_request
+def add_cors_headers(response):
+    # Simple CORS for local development. Replace with flask-cors or stricter rules in production.
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return response
+
+
 def allowed_filename(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -18,8 +27,11 @@ def health():
     return jsonify({"status": "ok"})
 
 
-@app.route("/api/generate-podcast", methods=["POST"])
+@app.route("/api/generate-podcast", methods=["POST", "OPTIONS"])
 def generate_podcast():
+    # Respond to preflight
+    if request.method == "OPTIONS":
+        return jsonify({"success": True}), 200
     """
     Expected multipart/form-data with a single file field named 'file'.
     This endpoint performs:
