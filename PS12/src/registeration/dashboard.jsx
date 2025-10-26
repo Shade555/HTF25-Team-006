@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import * as WebSpeech from "./webspeech_adapter";
 import { useNavigate } from "react-router-dom";
 import { initializeApp } from "firebase/app";
 import {
@@ -372,8 +373,43 @@ const PodcastScriptModal = ({ isOpen, onClose, script, title }) => {
   );
 };
 
-const PodcastCard = ({ podcast, onViewScript, onDelete }) => (
-  <div className="bg-slate-800 p-4 rounded-xl shadow-lg flex flex-col justify-start items-start transition-transform duration-300 hover:shadow-xl hover:scale-[1.02]">
+const PodcastCard = ({ podcast, onViewScript, onDelete }) => {
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  const playWithWebSpeech = async () => {
+    try {
+      const text = podcast.fullScript || podcast.summary || podcast.title || "";
+      if (!text) return;
+      setIsSpeaking(true);
+      if (WebSpeech.isAvailable()) {
+        await WebSpeech.speak(text, podcast.voice || null, { rate: 1 });
+      } else {
+        // fallback: use HTML5 Audio if audioURL present
+        if (podcast.audioURL) {
+          const audio = new Audio(podcast.audioURL);
+          audio.play();
+          // no await; let it play
+        }
+      }
+    } catch (e) {
+      console.error('WebSpeech play failed', e);
+    } finally {
+      setIsSpeaking(false);
+    }
+  };
+
+  const stopWebSpeech = () => {
+    try {
+      if (WebSpeech.isAvailable()) WebSpeech.cancel();
+    } catch (e) {
+      console.warn('cancel failed', e);
+    } finally {
+      setIsSpeaking(false);
+    }
+  };
+
+  return (
+    <div className="bg-slate-800 p-4 rounded-xl shadow-lg flex flex-col justify-start items-start transition-transform duration-300 hover:shadow-xl hover:scale-[1.02]">
     <div>
       <div className="flex items-center mb-2">
         <BookIcon className="w-5 h-5 mr-2" style={{ color: ACCENT_COLOR }} />
@@ -395,7 +431,7 @@ const PodcastCard = ({ podcast, onViewScript, onDelete }) => (
       </p>
     </div>
 
-    <div className="space-y-3">
+  <div className="space-y-3">
       {/* Audio Player */}
       <audio controls className="w-full h-10 rounded-full bg-slate-900">
         <source src={podcast.audioURL} type="audio/mp3" />
@@ -410,6 +446,13 @@ const PodcastCard = ({ podcast, onViewScript, onDelete }) => (
           >
             <ScriptsIcon className="w-4 h-4 mr-1" />
             View Script
+          </button>
+          <button
+            className="flex items-center text-xs font-medium hover:text-white transition-colors ml-2"
+            onClick={() => (isSpeaking ? stopWebSpeech() : playWithWebSpeech())}
+          >
+            <PlayIcon className="w-4 h-4 mr-1" />
+            {isSpeaking ? "Stop" : "Play (Web)"}
           </button>
           <button
             type="button"
@@ -448,7 +491,8 @@ const PodcastCard = ({ podcast, onViewScript, onDelete }) => (
       </div>
     </div>
   </div>
-);
+  );
+};
 
 const UploadSection = ({ onNewPodcast }) => {
   const [file, setFile] = useState(null);
@@ -517,6 +561,7 @@ const UploadSection = ({ onNewPodcast }) => {
             tags: [],
             fullScript: '',
             status: 'pending',
+            voice: selectedVoice,
           };
           if (onNewPodcast) onNewPodcast(pending);
           startPollingJob(jobId);
@@ -539,6 +584,7 @@ const UploadSection = ({ onNewPodcast }) => {
               tags: [],
               fullScript: body.summary || '',
               status: 'completed',
+              voice: selectedVoice,
             };
             if (onNewPodcast) onNewPodcast(completed, true);
             return;
@@ -568,6 +614,25 @@ const UploadSection = ({ onNewPodcast }) => {
     let mounted = true;
     const fetchVoices = async () => {
       try {
+        // Prefer browser Web Speech API if available
+        if (WebSpeech.isAvailable()) {
+          // Ensure voices are populated (some browsers require a small delay or an event)
+          const populate = () => {
+            const list = WebSpeech.listVoices();
+            if (list && list.length > 0) {
+              setVoices(list);
+              setSelectedVoice((v) => v || list[0].Name || list[0].Id);
+            }
+          };
+          // try immediate then also after voiceschanged
+          populate();
+          window.speechSynthesis.onvoiceschanged = () => {
+            if (!mounted) return;
+            populate();
+          };
+          return;
+        }
+
         const r = await fetch(`${API_BASE}/api/tts/voices`);
         if (r.ok) {
           const data = await r.json();
@@ -583,13 +648,22 @@ const UploadSection = ({ onNewPodcast }) => {
       }
     };
     fetchVoices();
-    return () => (mounted = false);
+    return () => {
+      mounted = false;
+      if (WebSpeech.isAvailable()) window.speechSynthesis.onvoiceschanged = null;
+    };
   }, []);
 
   const handlePreview = async () => {
     if (!selectedVoice) return;
     setIsPreviewing(true);
     try {
+      if (WebSpeech.isAvailable()) {
+        await WebSpeech.speak(previewText, selectedVoice, { rate: 1 });
+        setIsPreviewing(false);
+        return;
+      }
+
       const r = await fetch(`${API_BASE}/api/tts/preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -623,7 +697,7 @@ const UploadSection = ({ onNewPodcast }) => {
           const job = data.job;
           if (job && job.status === 'completed') {
             // construct podcast item
-            const completed = {
+        const completed = {
               id: job.job_id,
               fileName: job.file_path ? job.file_path.split('/').pop() : job.job_id,
               title: job.file_path ? job.file_path.split('/').pop().replace(/\.[^/.]+$/, '') : 'Podcast',
@@ -633,14 +707,15 @@ const UploadSection = ({ onNewPodcast }) => {
               audioURL: job.audio_url || (job.audio_base64 ? `data:audio/wav;base64,${job.audio_base64}` : null),
               tags: [],
               fullScript: job.summary || '',
-              status: 'completed',
+          status: 'completed',
+          voice: job.voice || selectedVoice,
             };
             if (onNewPodcast) onNewPodcast(completed, true);
             clearInterval(pollingRefs.current[jobId]);
             delete pollingRefs.current[jobId];
           } else if (job && job.status === 'failed') {
             // mark failed
-            const failed = { id: job.job_id, fileName: job.file_path || job.job_id, title: 'Failed', date: job.updated_at, summary: 'Failed to generate', status: 'failed' };
+            const failed = { id: job.job_id, fileName: job.file_path || job.job_id, title: 'Failed', date: job.updated_at, summary: 'Failed to generate', status: 'failed', voice: job.voice || selectedVoice };
             if (onNewPodcast) onNewPodcast(failed, true);
             clearInterval(pollingRefs.current[jobId]);
             delete pollingRefs.current[jobId];
