@@ -1,0 +1,368 @@
+/* Scoped dashboard styles to match the provided mockup
+   This file targets the existing markup in `dashboard.jsx` and overrides
+   utility-class-like names found in the component so no heavy JSX changes
+   are required. It's intentionally scoped under .af-dashboard (added to the
+   outermost div) to limit global impact.
+*/
+
+.af-dashboard {
+  --bg: #0f1724;
+  --card: #111827;
+  --muted: #94a3b8;
+  --accent: #b0a6df;
+  --accent-dark: rgba(176, 166, 223, 0.12);
+  --text: #f8fafc;
+  height: 100%;
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial;
+}
+
+/* Layout */
+.af-dashboard > .flex {
+  height: 100%;
+}
+
+.af-dashboard aside.w-64 {
+  width: 200px; /* slightly narrower to save vertical space */
+  background: var(--bg);
+  padding: 50px 8px 8px; /* push sidebar content down from the very top */
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 8px 30px rgba(2, 6, 23, 0.6);
+  border-right: 1px solid rgba(255, 255, 255, 0.02);
+  box-sizing: border-box;
+  /* Stick the sidebar to the extreme left permanently */
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 999;
+  max-height: 100vh;
+  overflow: hidden; /* avoid page scroll; enable inner scroll if needed */
+}
+
+/* Brand */
+.af-dashboard aside svg {
+  color: var(--accent);
+}
+.af-dashboard aside .text-xl {
+  color: var(--accent);
+  font-weight: 800;
+  font-size: 16px; /* smaller brand text */
+}
+
+/* Compact top icon styling */
+.af-dashboard .sidebar-top-icon {
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  padding: 30px 0; /* add vertical padding around the logo */
+}
+.af-dashboard .sidebar-top-icon .compact-icon {
+  box-shadow: 0 8px 30px rgba(2, 6, 23, 0.6);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  padding: 14px; /* inner padding so the visible circle has breathing room */
+  background: var(--accent);
+  width: 76px;
+  height: 76px;
+}
+.af-dashboard .sidebar-top-icon .compact-icon .compact-initial {
+  color: var(--text);
+  font-weight: 800;
+  font-size: 28px;
+  line-height: 1;
+}
+
+/* Profile block */
+.af-dashboard .flex.items-center.mb-8.p-3.rounded-xl {
+  background: rgba(255, 255, 255, 0.02);
+  padding: 4px 6px;
+  border-radius: 10px;
+  gap: 6px;
+}
+
+/* Sidebar items */
+.af-dashboard aside nav > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 10px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, transform 120ms ease;
+}
+.af-dashboard aside nav > div:hover {
+  background: rgba(255, 255, 255, 0.02);
+  color: #ffffff;
+  transform: translateX(2px);
+}
+/* Accent for active handled by inline style in JSX, but ensure subtle ring */
+.af-dashboard aside nav > div[style] {
+  box-shadow: 0 6px 18px var(--accent-dark);
+}
+
+/* Dark mode toggle removed - styles cleared */
+
+/* Main area */
+.af-dashboard main {
+  padding: 28px;
+  overflow-y: auto;
+  /* Account for fixed sidebar width so main content doesn't sit under it */
+  margin-left: 220px;
+}
+.af-dashboard .grid {
+  gap: 28px;
+}
+
+/* Upload Section container */
+.af-dashboard h2.text-2xl {
+  color: #ffffff;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+/* MODIFIED: 
+  - Selector changed from .p-10 to .p-6 to match JSX
+  - align-items changed to flex-start
+  - justify-content changed to flex-start
+*/
+.af-dashboard .p-6.border-2.border-dashed {
+  border-radius: 22px;
+  padding: 40px;
+  border-style: dashed;
+  border-width: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start; /* MODIFIED */
+  justify-content: flex-start; /* MODIFIED */
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.02),
+    rgba(255, 255, 255, 0.01)
+  );
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+/* MODIFIED: 
+  - Selector changed from .p-10 .w-12 to .p-6 .w-8
+  - Size updated to match w-8/h-8 (32px)
+*/
+.af-dashboard .p-6 .w-8 {
+  width: 32px;
+  height: 32px;
+}
+
+.af-dashboard .text-lg {
+  color: #e6eef8;
+  font-weight: 600;
+}
+.af-dashboard .text-sm.text-slate-400 {
+  color: var(--muted);
+}
+
+/* File details card */
+.af-dashboard .bg-slate-800.p-6.rounded-xl {
+  background: var(--card);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(2, 6, 23, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.02);
+}
+
+.af-dashboard .text-white {
+  color: #f8fafc;
+}
+.af-dashboard .text-slate-300 {
+  color: #e6eef8;
+}
+.af-dashboard .text-slate-400 {
+  color: var(--muted);
+}
+
+/* Buttons */
+.af-dashboard button[style] {
+  /* accent buttons that use inline backgroundColor */
+  box-shadow: 0 6px 18px rgba(176, 166, 223, 0.08);
+}
+.af-dashboard button[disabled] {
+  opacity: 0.75;
+}
+
+/* Search and tags area */
+.af-dashboard .bg-slate-800.p-4.rounded-xl {
+  background: var(--card);
+  border-radius: 12px;
+}
+.af-dashboard input[type="text"] {
+  background: #0b1220;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  color: #e6eef8;
+}
+
+/* Podcast grid */
+.af-dashboard .grid.grid-cols-1.md\:grid-cols-2 {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+@media (min-width: 768px) {
+  .af-dashboard .grid.grid-cols-1.md\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Podcast card adjustments (targets the PodcastCard root in the component) */
+.af-dashboard .bg-slate-800.p-4.rounded-xl.shadow-lg {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.01),
+    rgba(255, 255, 255, 0.02)
+  );
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid rgba(176, 166, 223, 0.06);
+  transition: box-shadow 180ms ease, transform 160ms ease;
+}
+.af-dashboard .bg-slate-800.p-4.rounded-xl.shadow-lg:hover {
+  box-shadow: 0 10px 30px rgba(11, 15, 22, 0.6),
+    0 0 0 4px rgba(176, 166, 223, 0.04);
+  transform: translateY(-4px);
+}
+.af-dashboard .text-lg.font-semibold {
+  color: #ffffff;
+}
+.af-dashboard .text-xs.text-slate-400 {
+  color: var(--muted);
+}
+
+/* Audio controls */
+.af-dashboard audio {
+  background: #0b1220;
+  border-radius: 9999px;
+  width: 100%;
+}
+
+/* Right panel */
+.af-dashboard .lg\:col-span-1 {
+  position: sticky;
+  top: 24px;
+}
+
+.af-dashboard .bg-slate-800.p-5.rounded-xl.shadow-xl {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+/* Modal */
+.af-dashboard .fixed.inset-0 {
+  z-index: 60;
+}
+.af-dashboard .bg-slate-700 {
+  background: #0f1724;
+}
+.af-dashboard .rounded-2xl {
+  border-radius: 16px;
+}
+.af-dashboard .p-6 {
+  padding: 16px;
+}
+
+/* Small helpers */
+.af-dashboard .rounded-full {
+  border-radius: 9999px;
+}
+.af-dashboard aside .h-10.w-10.rounded-full,
+.af-dashboard aside .h-10.w-10 {
+  width: 12px !important; /* avatar size */
+  height: 12px !important;
+  min-width: 12px !important;
+  min-height: 12px !important;
+  font-size: 9px !important;
+  line-height: 12px !important;
+  margin-right: 6px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.af-dashboard aside .text-sm.font-semibold {
+  font-size: 11px;
+}
+.af-dashboard aside .text-xs.text-slate-400 {
+  font-size: 9px;
+}
+
+/* Slightly tighten nav item sizing */
+.af-dashboard aside nav > div {
+  gap: 6px;
+  padding: 5px 6px;
+  height: 36px; /* FIXED: Removed stray 's' */
+  margin-bottom: 3px;
+}
+
+/* Active item visuals */
+.af-dashboard aside nav > div[style] {
+  box-shadow: 0 8px 20px rgba(11, 15, 30, 0.45),
+    0 0 0 4px rgba(176, 166, 223, 0.04);
+  border-radius: 10px;
+}
+.af-dashboard .text-indigo-200 {
+  color: #c7b7ff;
+}
+.af-dashboard .ml-2 {
+  margin-left: 8px;
+}
+
+/* Ensure scrollbars look subtle on dark background */
+.af-dashboard main::-webkit-scrollbar {
+  width: 10px; /* FIXED: Removed stray 's' */
+}
+.af-dashboard main::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.af-dashboard main::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.6);
+  border-radius: 8px;
+}
+
+/* Responsiveness tweaks */
+@media (max-width: 900px) {
+  /* Keep sidebar visible on small screens but make it narrower to avoid layout issues */
+  .af-dashboard aside.w-64 {
+    width: 200px;
+    padding: 18px;
+  }
+  .af-dashboard main {
+    padding: 18px;
+    margin-left: 200px;
+  }
+  .af-dashboard .lg\:col-span-2 {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Small decorative accent (bottom-right) similar to mock */
+.af-dashboard::after {
+  content: "";
+  position: fixed;
+  right: 20px;
+  bottom: 18px;
+  width: 18px;
+  height: 18px;
+  background: linear-gradient(
+    135deg,
+    rgba(176, 166, 223, 0.2),
+    /* FIXED: Removed stray 's' */ rgba(176, 166, 223, 0.08)
+  );
+  border-radius: 6px;
+  filter: blur(6px);
+  pointer-events: none;
+}

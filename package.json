@@ -1,0 +1,11 @@
+{
+  "name": "htf25-team-006-root",
+  "private": true,
+  "scripts": {
+    "dev": "cd PS12 && npm run dev",
+    "install-ps12": "cd PS12 && npm install"
+  },
+  "dependencies": {
+    "firebase": "^12.4.0"
+  }
+}
